@@ -1,6 +1,8 @@
 mod chip;
 mod memory;
 mod random;
+mod registers;
+mod stack;
 mod video;
 
 use chip::Chip;

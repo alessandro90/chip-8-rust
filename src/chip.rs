@@ -1,5 +1,7 @@
 use crate::memory::Memory;
 use crate::random::Generator;
+use crate::registers::Registers;
+use crate::stack::Stack;
 use crate::video::Video;
 
 type InstructionExecutor = fn(&mut Chip, u16);
@@ -8,6 +10,8 @@ pub struct Chip {
     memory: Memory,
     rand_gen: Generator<u8>,
     video: Video,
+    stack: Stack,
+    registers: Registers,
 }
 
 impl Chip {
@@ -16,6 +20,8 @@ impl Chip {
             memory: Memory::new(),
             rand_gen: Generator::new(),
             video: Video::new(),
+            stack: Stack::new(),
+            registers: Registers::new(),
         }
     }
 
@@ -99,46 +105,82 @@ impl Chip {
     }
 
     #[allow(non_snake_case)]
-    fn op_00EE(&mut self) {}
+    fn op_00EE(&mut self) {
+        self.memory.set_address(self.stack.pop());
+    }
 
     #[allow(non_snake_case)]
-    fn op_1nnn(&mut self, instruction: u16) {}
+    fn op_1nnn(&mut self, addr: u16) {
+        self.memory.set_address(addr)
+    }
 
     #[allow(non_snake_case)]
-    fn op_2nnn(&mut self, instruction: u16) {}
+    fn op_2nnn(&mut self, addr: u16) {
+        self.stack.push(addr);
+        self.memory.set_address(addr);
+    }
 
     #[allow(non_snake_case)]
-    fn op_3xkk(&mut self, fst: u8, snd: u8) {}
+    fn op_3xkk(&mut self, reg: u8, byte: u8) {
+        if self.registers.read(reg) == byte {
+            self.memory.advance(2);
+        }
+    }
 
     #[allow(non_snake_case)]
-    fn op_4xkk(&mut self, fst: u8, snd: u8) {}
+    fn op_4xkk(&mut self, reg: u8, byte: u8) {
+        if self.registers.read(reg) != byte {
+            self.memory.advance(2);
+        }
+    }
 
     #[allow(non_snake_case)]
-    fn op_5xy0(&mut self, fst: u8, snd: u8) {}
+    fn op_5xy0(&mut self, reg_1: u8, reg_2: u8) {
+        if self.registers.read(reg_1) == self.registers.read(reg_2) {
+            self.memory.advance(2);
+        }
+    }
 
     #[allow(non_snake_case)]
-    fn op_6xkk(&mut self, fst: u8, snd: u8) {}
+    fn op_6xkk(&mut self, reg: u8, val: u8) {
+        self.registers.set(reg, val);
+    }
 
     #[allow(non_snake_case)]
-    fn op_7xkk(&mut self, fst: u8, snd: u8) {}
+    fn op_7xkk(&mut self, reg: u8, val: u8) {
+        let value = self.registers.read(reg);
+        self.registers.set(reg, value + val);
+    }
 
     #[allow(non_snake_case)]
-    fn op_8xy0(&mut self, fst: u8, snd: u8) {}
+    fn op_8xy0(&mut self, reg_1: u8, reg_2: u8) {
+        self.registers.set(reg_1, self.registers.read(reg_2));
+    }
 
     #[allow(non_snake_case)]
-    fn op_8xy1(&mut self, fst: u8, snd: u8) {}
+    fn op_8xy1(&mut self, reg_1: u8, reg_2: u8) {
+        self.registers.set(reg_1, self.registers.or(reg_1, reg_2));
+    }
 
     #[allow(non_snake_case)]
-    fn op_8xy2(&mut self, fst: u8, snd: u8) {}
+    fn op_8xy2(&mut self, reg_1: u8, reg_2: u8) {
+        self.registers.set(reg_1, self.registers.and(reg_1, reg_2));
+    }
 
     #[allow(non_snake_case)]
-    fn op_8xy3(&mut self, fst: u8, snd: u8) {}
+    fn op_8xy3(&mut self, reg_1: u8, reg_2: u8) {
+        self.registers.set(reg_1, self.registers.xor(reg_1, reg_2));
+    }
 
     #[allow(non_snake_case)]
-    fn op_8xy4(&mut self, fst: u8, snd: u8) {}
+    fn op_8xy4(&mut self, reg_1: u8, reg_2: u8) {
+        self.registers.add_inplace(reg_1, reg_2);
+    }
 
     #[allow(non_snake_case)]
-    fn op_8xy5(&mut self, fst: u8, snd: u8) {}
+    fn op_8xy5(&mut self, lhs: u8, rhs: u8) {
+        self.registers.sub_inplace(lhs, rhs);
+    }
 
     #[allow(non_snake_case)]
     fn op_8xy6(&mut self, fst: u8, snd: u8) {}

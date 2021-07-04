@@ -24,12 +24,12 @@ const FONTSET: [u8; 80] = [
 
 pub struct Memory {
     buf: [u8; MEMORY_SIZE],
-    pc: usize,
+    pc: u16,
 }
 
 impl Memory {
     pub fn new() -> Memory {
-        let pc = START_ADDRESS; // First instruction to be executed
+        let pc = START_ADDRESS as u16; // First instruction to be executed
         let mut buf: [u8; MEMORY_SIZE] = [0u8; MEMORY_SIZE];
         let font_span = FONTSET_START_ADDRESS..FONTSET_START_ADDRESS + FONTSET.len();
         buf[font_span].copy_from_slice(&FONTSET);
@@ -42,12 +42,20 @@ impl Memory {
         self.load_instructions(&rom_data);
     }
 
-    fn load_instructions(&mut self, data: &[u8]) {
+    pub fn load_instructions(&mut self, data: &[u8]) {
         if data.len() > self.buf.len() - START_ADDRESS {
             panic!("ROM file exeeds max allowed size")
         }
 
         self.buf[START_ADDRESS..START_ADDRESS + data.len()].copy_from_slice(&data);
+    }
+
+    pub fn set_address(&mut self, addr: u16) {
+        self.pc = addr;
+    }
+
+    pub fn advance(&mut self, n: u16) {
+        self.pc += n;
     }
 
     fn fonts(&self) -> &[u8] {
@@ -66,7 +74,7 @@ mod test {
     #[test]
     fn memory_build() {
         let memory = Memory::new();
-        assert_eq!(memory.pc, START_ADDRESS);
+        assert_eq!(memory.pc as usize, START_ADDRESS);
         assert_eq!(
             memory.buf[..FONTSET_START_ADDRESS],
             [0; FONTSET_START_ADDRESS]
