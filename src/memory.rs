@@ -25,6 +25,7 @@ const FONTSET: [u8; 80] = [
 pub struct Memory {
     buf: [u8; MEMORY_SIZE],
     pc: u16,
+    pub index_register: u16,
 }
 
 impl Memory {
@@ -33,10 +34,17 @@ impl Memory {
         let mut buf: [u8; MEMORY_SIZE] = [0u8; MEMORY_SIZE];
         let font_span = FONTSET_START_ADDRESS..FONTSET_START_ADDRESS + FONTSET.len();
         buf[font_span].copy_from_slice(&FONTSET);
-        Memory { buf, pc }
+        Memory {
+            buf,
+            pc,
+            index_register: 0,
+        }
     }
 
-    // TODO: move out of Memory struct
+    pub fn fetch(&self) -> (u8, u8) {
+        (self.buf[self.pc as usize], self.buf[(self.pc + 1) as usize])
+    }
+
     pub fn load_rom(&mut self, filename: &str) {
         let rom_data = fs::read(filename).expect("Error loading ROM file");
         self.load_instructions(&rom_data);
@@ -58,12 +66,37 @@ impl Memory {
         self.pc += n;
     }
 
+    pub fn go_back(&mut self, n: u16) {
+        self.pc -= n;
+    }
+
+    pub fn slice(&self, from: usize, to: usize) -> &[u8] {
+        &self.buf[from..to]
+    }
+
     fn fonts(&self) -> &[u8] {
         &self.buf[FONTSET_START_ADDRESS..FONTSET_START_ADDRESS + FONTSET.len()]
     }
 
     fn instructions(&self) -> &[u8] {
         &self.buf[START_ADDRESS..]
+    }
+
+    pub fn set_index_register_to_font_no(&mut self, digit: u8) {
+        self.index_register = (FONTSET_START_ADDRESS + (5 * (digit as usize))) as u16;
+    }
+
+    pub fn store_bcd_repr(&mut self, n: u8) {
+        self.buf[self.index_register as usize + 2] = n % 10;
+        let n = n / 10;
+        self.buf[self.index_register as usize + 1] = n % 10;
+        let n = n / 10;
+        self.buf[self.index_register as usize] = n % 10;
+    }
+
+    pub fn copy_from(&mut self, src: &[u8]) {
+        self.buf[self.index_register as usize..self.index_register as usize + src.len()]
+            .copy_from_slice(src);
     }
 }
 

@@ -1,10 +1,11 @@
+use std::array::IntoIter;
+
+use crate::keypad::Keypad;
 use crate::memory::Memory;
 use crate::random::Generator;
 use crate::registers::Registers;
 use crate::stack::Stack;
 use crate::video::Video;
-
-type InstructionExecutor = fn(&mut Chip, u16);
 
 pub struct Chip {
     memory: Memory,
@@ -12,6 +13,9 @@ pub struct Chip {
     video: Video,
     stack: Stack,
     registers: Registers,
+    keypad: Keypad,
+    delay_timer: u8,
+    sound_timer: u8,
 }
 
 impl Chip {
@@ -22,10 +26,29 @@ impl Chip {
             video: Video::new(),
             stack: Stack::new(),
             registers: Registers::new(),
+            keypad: Keypad::new(),
+            delay_timer: 0,
+            sound_timer: 0,
         }
     }
 
-    pub fn execute_instruction(&mut self, opcode: u16) {
+    pub fn cycle(&mut self) {
+        self.memory.advance(2);
+
+        let (fst, snd) = self.memory.fetch();
+        let opcode = ((fst as u16) << 8u16) | (snd as u16);
+        self.execute_instruction(opcode);
+
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1;
+        }
+
+        if self.sound_timer > 0 {
+            self.sound_timer -= 1;
+        }
+    }
+
+    fn execute_instruction(&mut self, opcode: u16) {
         match opcode {
             0x00E0 => self.op_00E0(),
             0x00EE => self.op_00EE(),
@@ -64,15 +87,11 @@ impl Chip {
             opcode if opcode & 0xF00F == 0x8005 => {
                 self.op_8xy5(decode_fst(opcode), decode_snd(opcode))
             }
-            opcode if opcode & 0xF00F == 0x8006 => {
-                self.op_8xy6(decode_fst(opcode), decode_snd(opcode))
-            }
+            opcode if opcode & 0xF00F == 0x8006 => self.op_8xy6(decode_fst(opcode)),
             opcode if opcode & 0xF00F == 0x8007 => {
                 self.op_8xy7(decode_fst(opcode), decode_snd(opcode))
             }
-            opcode if opcode & 0xF00F == 0x800E => {
-                self.op_8xyE(decode_fst(opcode), decode_snd(opcode))
-            }
+            opcode if opcode & 0xF00F == 0x800E => self.op_8xyE(decode_fst(opcode)),
             opcode if opcode & 0xF00F == 0x9000 => {
                 self.op_9xy0(decode_fst(opcode), decode_snd(opcode))
             }
@@ -149,7 +168,7 @@ impl Chip {
     #[allow(non_snake_case)]
     fn op_7xkk(&mut self, reg: u8, val: u8) {
         let value = self.registers.read(reg);
-        self.registers.set(reg, value + val);
+        self.registers.set(reg, value.wrapping_add(val));
     }
 
     #[allow(non_snake_case)]
@@ -183,61 +202,144 @@ impl Chip {
     }
 
     #[allow(non_snake_case)]
-    fn op_8xy6(&mut self, fst: u8, snd: u8) {}
+    fn op_8xy6(&mut self, reg: u8) {
+        self.registers.shitf_right_inplace(reg);
+    }
 
     #[allow(non_snake_case)]
-    fn op_8xy7(&mut self, fst: u8, snd: u8) {}
+    fn op_8xy7(&mut self, reg_1: u8, reg_2: u8) {
+        self.registers.sub_n(reg_1, reg_2);
+    }
 
     #[allow(non_snake_case)]
-    fn op_8xyE(&mut self, fst: u8, snd: u8) {}
+    fn op_8xyE(&mut self, reg: u8) {
+        self.registers.shift_left_inplace(reg);
+    }
 
     #[allow(non_snake_case)]
-    fn op_9xy0(&mut self, fst: u8, snd: u8) {}
+    fn op_9xy0(&mut self, fst: u8, snd: u8) {
+        if self.registers.read(fst) != self.registers.read(snd) {
+            self.memory.advance(2);
+        }
+    }
 
     #[allow(non_snake_case)]
-    fn op_Annn(&mut self, instruction: u16) {}
+    fn op_Annn(&mut self, instruction: u16) {
+        self.memory.index_register = instruction;
+    }
 
     #[allow(non_snake_case)]
-    fn op_Bnnn(&mut self, instruction: u16) {}
+    fn op_Bnnn(&mut self, address: u16) {
+        self.memory.advance(self.registers.read(0) as u16 + address);
+    }
 
     #[allow(non_snake_case)]
-    fn op_Cxkk(&mut self, fst: u8, snd: u8) {}
+    fn op_Cxkk(&mut self, fst: u8, snd: u8) {
+        self.registers.set(fst, self.rand_gen.get_random() & snd);
+    }
 
     #[allow(non_snake_case)]
-    fn op_Dxyn(&mut self, fst: u8, snd: u8, thrd: u8) {}
+    fn op_Dxyn(&mut self, vx: u8, vy: u8, height: u8) {
+        let sprite = self
+            .memory
+            .slice(self.memory.index_register as usize, height as usize);
+        self.registers.vx_set(0);
+        for (row, byte) in sprite.iter().enumerate() {
+            for (col, sprite_pixel) in byte_to_enumeration(*byte) {
+                let screen_pixel = self.video.pixel(
+                    self.registers.read(vy) as usize + row,
+                    self.registers.read(vx) as usize + col,
+                );
+                if sprite_pixel != 0 {
+                    if *screen_pixel == 0xFFFFFFFF {
+                        self.registers.vx_set(1);
+                    }
+                    *screen_pixel ^= 0xFFFFFFFF;
+                }
+            }
+        }
+    }
 
     #[allow(non_snake_case)]
-    fn op_Ex9E(&mut self, instruction: u8) {}
+    fn op_Ex9E(&mut self, key: u8) {
+        if self.keypad.is_pressed(key) {
+            self.memory.advance(2);
+        }
+    }
 
     #[allow(non_snake_case)]
-    fn op_ExA1(&mut self, instruction: u8) {}
+    fn op_ExA1(&mut self, key: u8) {
+        if !self.keypad.is_pressed(key) {
+            self.memory.advance(2);
+        }
+    }
 
     #[allow(non_snake_case)]
-    fn op_Fx07(&mut self, instruction: u8) {}
+    fn op_Fx07(&mut self, reg: u8) {
+        self.registers.set(reg, self.delay_timer);
+    }
 
     #[allow(non_snake_case)]
-    fn op_Fx0A(&mut self, instruction: u8) {}
+    fn op_Fx0A(&mut self, reg: u8) {
+        if let Some(key) = self.keypad.get_pressed() {
+            self.registers.set(reg, key as u8);
+        } else {
+            self.memory.go_back(2);
+        }
+    }
 
     #[allow(non_snake_case)]
-    fn op_Fx15(&mut self, instruction: u8) {}
+    fn op_Fx15(&mut self, instruction: u8) {
+        self.delay_timer = instruction;
+    }
 
     #[allow(non_snake_case)]
-    fn op_Fx18(&mut self, instruction: u8) {}
+    fn op_Fx18(&mut self, reg: u8) {
+        self.sound_timer = self.registers.read(reg)
+    }
 
     #[allow(non_snake_case)]
-    fn op_Fx1E(&mut self, instruction: u8) {}
+    fn op_Fx1E(&mut self, reg: u8) {
+        self.memory.index_register += self.registers.read(reg) as u16;
+    }
 
     #[allow(non_snake_case)]
-    fn op_Fx29(&mut self, instruction: u8) {}
+    fn op_Fx29(&mut self, digit: u8) {
+        self.memory.set_index_register_to_font_no(digit);
+    }
 
     #[allow(non_snake_case)]
-    fn op_Fx33(&mut self, instruction: u8) {}
+    fn op_Fx33(&mut self, n: u8) {
+        self.memory.store_bcd_repr(n);
+    }
 
     #[allow(non_snake_case)]
-    fn op_Fx55(&mut self, instruction: u8) {}
+    fn op_Fx55(&mut self, val: u8) {
+        self.memory
+            .copy_from(self.registers.slice(0, (val + 1) as usize));
+    }
 
     #[allow(non_snake_case)]
-    fn op_Fx65(&mut self, instruction: u8) {}
+    fn op_Fx65(&mut self, val: u8) {
+        self.registers.copy_from(self.memory.slice(
+            self.memory.index_register as usize,
+            self.memory.index_register as usize + (val + 1) as usize,
+        ));
+    }
+}
+
+fn byte_to_enumeration(b: u8) -> impl Iterator<Item = (usize, u8)> {
+    IntoIter::new([
+        b & 0b10000000,
+        b & 0b01000000,
+        b & 0b00100000,
+        b & 0b00010000,
+        b & 0b00001000,
+        b & 0b00000100,
+        b & 0b00000010,
+        b & 0b00000001,
+    ])
+    .enumerate()
 }
 
 fn decode_fst(n: u16) -> u8 {
