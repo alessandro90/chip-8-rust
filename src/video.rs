@@ -1,5 +1,6 @@
-pub const VIDEO_WIDTH: usize = 32;
-pub const VIDEO_HEIGHT: usize = 64;
+pub const VIDEO_WIDTH: usize = 64;
+pub const VIDEO_HEIGHT: usize = 32;
+pub const PITCH: usize = 4 * VIDEO_WIDTH;
 const VIDEO_SIZE: usize = VIDEO_HEIGHT * VIDEO_WIDTH;
 
 pub struct Video {
@@ -17,7 +18,11 @@ impl Video {
         self.buf.fill(0);
     }
 
-    pub fn pixel(&mut self, x: usize, y: usize) -> &mut u32 {
-        &mut self.buf[(y % VIDEO_HEIGHT) * VIDEO_WIDTH + x % VIDEO_WIDTH]
+    pub fn buffer(&self) -> &[u32] {
+        &self.buf[..]
+    }
+
+    pub fn pixel(&mut self, y: usize, x: usize) -> &mut u32 {
+        &mut self.buf[y * VIDEO_WIDTH + x]
     }
 }

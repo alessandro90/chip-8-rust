@@ -21,7 +21,7 @@ impl Registers {
 
     pub fn add_inplace(&mut self, lhs: u8, rhs: u8) {
         let sum = self.regs[lhs as usize] as u16 + self.regs[rhs as usize] as u16;
-        if sum > 255u16 {
+        if sum > u8::MAX as u16 {
             self.vx_set(1);
         } else {
             self.vx_set(0);
@@ -37,7 +37,7 @@ impl Registers {
         } else {
             self.vx_set(0);
         }
-        self.regs[lhs as usize] = u8::wrapping_sub(vx, vy);
+        self.regs[lhs as usize] = self.regs[lhs as usize].wrapping_sub(vy);
     }
 
     pub fn or(&self, reg_1: u8, reg_2: u8) -> u8 {
@@ -68,7 +68,7 @@ impl Registers {
     }
 
     pub fn shift_left_inplace(&mut self, reg: u8) {
-        self.vx_set(self.regs[reg as usize] & 0x80);
+        self.vx_set((self.regs[reg as usize] & 0x80) >> 7);
         self.regs[reg as usize] <<= 1;
     }
 
@@ -82,5 +82,49 @@ impl Registers {
 
     pub fn copy_from(&mut self, src: &[u8]) {
         self.regs[0..src.len()].copy_from_slice(src);
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn read_test() {
+        let mut registers = Registers::new();
+        registers.regs[0] = 1;
+        registers.regs[5] = 10;
+        registers.regs[15] = 100;
+
+        assert_eq!(registers.read(0), 1);
+        assert_eq!(registers.read(5), 10);
+        assert_eq!(registers.read(15), 100);
+    }
+
+    #[test]
+    fn set_test() {
+        let mut registers = Registers::new();
+        registers.set(10, 20);
+        assert_eq!(registers.regs[10], 20);
+    }
+
+    #[test]
+    fn add_inplace_test() {
+        {
+            let mut registers = Registers::new();
+            registers.regs[5] = 10;
+            registers.regs[10] = 50;
+            registers.add_inplace(5, 10);
+            assert_eq!(registers.regs[5], 60);
+            assert_eq!(registers.regs[REGISTERS_NUM - 1], 0);
+        }
+        {
+            let mut registers = Registers::new();
+            registers.regs[5] = 255;
+            registers.regs[10] = 100;
+            registers.add_inplace(5, 10);
+            assert_eq!(registers.regs[5], 99);
+            assert_eq!(registers.regs[REGISTERS_NUM - 1], 1);
+        }
     }
 }
