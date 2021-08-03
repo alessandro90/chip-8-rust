@@ -120,7 +120,7 @@ mod test {
         }
         {
             let mut registers = Registers::new();
-            registers.regs[5] = 255;
+            registers.regs[5] = u8::MAX;
             registers.regs[10] = 100;
             registers.add_inplace(5, 10);
             assert_eq!(registers.regs[5], 99);

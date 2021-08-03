@@ -126,7 +126,7 @@ impl Chip {
             opcode if opcode & 0xF0FF == 0xF033 => self.op_Fx33(decode_fst(opcode)),
             opcode if opcode & 0xF0FF == 0xF055 => self.op_Fx55(decode_fst(opcode)),
             opcode if opcode & 0xF0FF == 0xF065 => self.op_Fx65(decode_fst(opcode)),
-            opcode => println!("; Unknown instruction!!!! {:#06x}", opcode),
+            opcode => eprintln!("Unknown instruction (skipping): {:#06x}", opcode),
         }
     }
 

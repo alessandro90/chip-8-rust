@@ -48,6 +48,7 @@ impl Memory {
         opcode
     }
 
+    // TODO: move out of module this function
     pub fn load_rom(&mut self, filename: &str) {
         let rom_data = fs::read(filename).expect("Error loading ROM file");
         self.load_instructions(&rom_data);

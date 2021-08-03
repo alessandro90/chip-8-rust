@@ -22,6 +22,7 @@ impl Video {
         &self.buf[..]
     }
 
+    // TODO: fix this method -> swap x, y and use % inside method
     pub fn pixel(&mut self, y: usize, x: usize) -> &mut u32 {
         &mut self.buf[y * VIDEO_WIDTH + x]
     }
